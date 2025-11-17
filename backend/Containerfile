@@ -14,4 +14,6 @@ FROM registry.access.redhat.com/ubi10-minimal:10.0
 
 COPY --from=build /bin/guestbook-api /bin/guestbook-api
 
+EXPOSE 8080
+
 CMD [ "/bin/guestbook-api" ]
