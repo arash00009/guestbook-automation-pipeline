@@ -32,11 +32,20 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRESQL_USER
-              value: guestbook
+              valueFrom:
+                secretKeyRef:
+                  name: db-password
+                  key: username
             - name: POSTGRESQL_PASSWORD
-              value: password
+              valueFrom:
+                secretKeyRef:
+                  name: db-password
+                  key: password
             - name: POSTGRESQL_DATABASE
-              value: guestbook
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: db-name
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql
@@ -90,7 +99,10 @@ spec:
             - containerPort: 6379
           env:
             - name: REDIS_PASSWORD
-              value: password
+              valueFrom:
+                secretKeyRef:
+                  name: redis-password
+                  key: password
           volumeMounts:
             - name: redis-data
               mountPath: /var/lib/redis/data
@@ -133,13 +145,25 @@ spec:
             - containerPort: 8080
           env:
             - name: DB_HOST
-              value: postgres
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: db-host
             - name: REDIS_HOST
-              value: redis
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: redis-host
             - name: REDIS_PORT
-              value: "6379"
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: redis-port
             - name: REDIS_PASSWORD
-              value: password
+              valueFrom:
+                secretKeyRef:
+                  name: redis-password
+                  key: password
 ---
 apiVersion: v1
 kind: Service
