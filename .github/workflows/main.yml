@@ -18,15 +18,14 @@ jobs:
         registry: ghcr.io
         username: ${{ secrets.GHCR_USERNAME }}
         password: ${{ secrets.GHCR_TOKEN }}
-        
+
     - name: Build app container
       run: |
         docker build -f Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest ./backend
 
-     - name: Build redis container
-       run: |
+    - name: Build redis container
+      run: |
         docker build -f Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest ./redis
-   
 
     - name: Push containers
       run: |
@@ -45,4 +44,5 @@ jobs:
     - name: Deploy on OpenShift
       run: |
         oc project test-miljo1
-        oc deployment\
+        # Lägg till ditt deployment-kommando här, t.ex.
+        # oc apply -f deployment.yaml
