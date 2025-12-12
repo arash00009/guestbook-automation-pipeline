@@ -45,8 +45,4 @@ jobs:
     - name: Deploy on OpenShift
       run: |
         oc project test-miljo1
-        oc apply -f config.yaml
-        oc apply -f secrets.yaml
-        oc apply -f backend.yaml
-        oc apply -f frontend.yaml
-      
+        oc deployment\
