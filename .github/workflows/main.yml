@@ -9,49 +9,51 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build app container
-        run: |
-          docker build -f backend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest ./backend
+    - name: Build app container
+      run: |
+        docker build -f backend/Containerfile \
+          -t ghcr.io/${{ github.repository_owner }}/guestbook:latest \
+          ./backend
 
-      - name: Build redis container
-        run: |
-          docker build -f frontend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest ./frontend
+    - name: Build frontend container
+      run: |
+        docker build -f frontend/Containerfile \
+          -t ghcr.io/${{ github.repository_owner }}/frontend:latest \
+          ./frontend
 
-      - name: Push containers
-        run: |
-          docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest
-          docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest
+    - name: Push containers
+      run: |
+        docker push ghcr.io/${{ github.repository_owner }}/guestbook:latest
+        docker push ghcr.io/${{ github.repository_owner }}/frontend:latest
 
-      - name: Install OpenShift CLI (oc)
-        run: |
-          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
-          tar -xzf oc.tar.gz
-          # Flytta oc-binären (finns i en undermapp) till /usr/local/bin och gör körbar
-          sudo mv */oc /usr/local/bin/oc || sudo mv oc /usr/local/bin/oc
-          sudo chmod +x /usr/local/bin/oc
-        shell: bash
+    - name: Install OpenShift CLI
+      run: |
+        curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+        tar -xzf oc.tar.gz
+        sudo mv oc /usr/local/bin/
+        rm oc.tar.gz kubectl
 
-      - name: Login to OpenShift
-        env:
-          OCP_TOKEN: ${{ secrets.OCP_TOKEN }}
-          OCP_SERVER: https://api.devops24.cloud2.se:6443
-        run: |
-          oc login --token="${OCP_TOKEN}" --insecure-skip-tls-verify --server="${OCP_SERVER}"
+    - name: Login to OpenShift
+      run: |
+        oc login \
+          --token=${{ secrets.OCP_TOKEN }} \
+          --insecure-skip-tls-verify \
+          --server=https://api.devops24.cloud2.se:6443
 
-      - name: Deploy on OpenShift
-        run: |
-          oc project test-miljo2
-          oc apply -f config.yaml
-          oc apply -f backend.yaml
-          oc apply -f frontend.yaml
-          oc apply -f secrets.yaml
+    - name: Deploy on OpenShift
+      run: |
+        oc project test-miljo2
+        oc apply -f config.yaml
+        oc apply -f backend.yaml
+        oc apply -f frontend.yaml
+        oc apply -f secrets.yaml
