@@ -1,12 +1,14 @@
+Här är ditt workflow rättat med YAML‑format och kommandon fixade:
+
+```yaml
 name: Build and Deploy
 
 on:
   push:
     branches: ["main"]
-    
+
 permissions:
   contents: write
-  packages: write
 
 jobs:
   frontend:
@@ -14,21 +16,24 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Build
-      run: cd frontend docker -f frontend:${{ github.sha }} .
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Tag the image
-     run: |
-       docker tag frontend${{ github.sha }} ghcr.io/arash00009 guestbook-automation-pipeline-frontend:${{ github.sha }}
-       docker tag  frontend${{ github.sha }} ghcr.io/arash00009 guestbook-automation-pipeline-frontend:latest
+      - name: Build image
+        run: |
+          cd frontend
+          docker build -t frontend:${{ github.sha }} .
 
-    - name: Push the images
+      - name: Tag the image
+        run: |
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
+
+      - name: Push the images
         run: |
           docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
-          docker push ghcr.io/arash00009 guestbook-automation-pipeline-frontend:latest
+          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
+```
 
  
     
