@@ -1,6 +1,4 @@
-Här är ditt workflow rättat med YAML‑format och kommandon fixade:
 
-```yaml
 name: Build and Deploy
 
 on:
