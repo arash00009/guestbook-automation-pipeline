@@ -21,13 +21,13 @@ jobs:
 
       - name: Tag the image
         run: |
-          docker tag frontend:${{ github.sha }} ghcr.io/jonasbjork/guestbook-automation-pipeline-frontend:${{ github.sha }}
-          docker tag frontend:${{ github.sha }} ghcr.io/jonasbjork/guestbook-automation-pipeline-frontend:latest
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
 
       - name: Push the images
         run: |
-          docker push ghcr.io/Arash00004/guestbook-automation-pipeline-frontend:${{ github.sha }}
-          docker push ghcr.io/Arash00004/guestbook-automation-pipeline-frontend:latest
+          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
+          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
 
 
     
