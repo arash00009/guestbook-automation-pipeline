@@ -5,9 +5,8 @@ on:
     branches:
       - main
 
-# Korrekta permissions
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -15,37 +14,37 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # --- Kontrollera filer ---
+      - name: List backend directory
+        run: |
+          echo "Files in backend/:"
+          ls -la backend/
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      # --- Build and push frontend ---
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          context: ./frontend
+          file: ./frontend/Containerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/guestbook-automation-pipeline-frontend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/guestbook-automation-pipeline-frontend:latest
 
-      - name: Build and push backend container
-        run: |
-          docker build -f backend/Containerfile \
-            -t ghcr.io/arash00009/guestbook-automation-pipeline-backend:${{ github.sha }} \
-            -t ghcr.io/arash00009/guestbook-automation-pipeline-backend:latest \
-            ./backend
-          docker push ghcr.io/arash00009/guestbook-automation-pipeline-backend:${{ github.sha }}
-          docker push ghcr.io/arash00009/guestbook-automation-pipeline-backend:latest
+      # --- Build and push backend ---
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Containerfile  # <--- Ändra detta om filen heter Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/guestbook:latest
 
-      - name: Build and push frontend container
-        run: |
-          docker build -f frontend/Containerfile \
-            -t ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }} \
-            -t ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest \
-            ./frontend
-          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
-          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
-
+      # --- Install and login to OpenShift ---
       - name: Install OpenShift CLI
         run: |
           curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
@@ -62,12 +61,7 @@ jobs:
 
       - name: Deploy on OpenShift
         run: |
-          oc project test-miljo2 || oc new-project test-miljo2
-          oc apply -f config.yaml
-          oc apply -f backend.yaml
-          oc apply -f frontend.yaml
-          oc apply -f secrets.yaml
-
+          oc project test-miljo2
           oc apply -f config.yaml
           oc apply -f backend.yaml
           oc apply -f frontend.yaml
