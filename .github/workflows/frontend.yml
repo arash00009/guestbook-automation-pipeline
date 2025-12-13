@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 jobs:
-  frontend:
+
     name: Build frontend
     runs-on: ubuntu-22.04
 
