@@ -18,7 +18,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Build
-      run: cd frontend docker -f frontend:${{ github.sha }} .
+      run: cd frontend docker -f frontend:${{ github.sha }} Containerfile.
 
  
     
