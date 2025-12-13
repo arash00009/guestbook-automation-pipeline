@@ -1,48 +1,111 @@
-ment name: Build and Deploy
+name: Build and Deploy
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ secrets.GHCR_USERNAME }}
-        password: ${{ secrets.GHCR_TOKEN }}
+      - name: List files (Debugging)
+        run: |
+          echo "Project structure:"
+          find . -name "Dockerfile" -o -name "Containerfile" -o -name "*.yaml" -o -name "*.yml" | sort
+          echo "Frontend directory contents:"
+          ls -la frontend/ || echo "No frontend directory"
+          echo "Backend directory contents:"
+          ls -la backend/ || echo "No backend directory"
 
-    - name: Build app container
-      run: |
-        docker build -f backend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest ./backend
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build redis container
-      run: |
-        docker build -f frontend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest ./frontend
+      - name: Build and push containers (Flexible approach)
+        run: |
+          # Check what build files exist and use appropriate ones
+          if [ -f "backend/Dockerfile" ]; then
+            echo "Building backend using Dockerfile"
+            docker build -f backend/Dockerfile \
+              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-backend:latest \
+              ./backend
+          elif [ -f "backend/Containerfile" ]; then
+            echo "Building backend using Containerfile"
+            docker build -f backend/Containerfile \
+              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-backend:latest \
+              ./backend
+          else
+            echo "ERROR: No Dockerfile or Containerfile found in backend/"
+            exit 1
+          fi
 
-    - name: Push containers
-      run: |
-        docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest
-        docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest
+          if [ -f "frontend/Dockerfile" ]; then
+            echo "Building frontend using Dockerfile"
+            docker build -f frontend/Dockerfile \
+              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-frontend:latest \
+              ./frontend
+          elif [ -f "frontend/Containerfile" ]; then
+            echo "Building frontend using Containerfile"
+            docker build -f frontend/Containerfile \
+              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-frontend:latest \
+              ./frontend
+          else
+            echo "ERROR: No Dockerfile or Containerfile found in frontend/"
+            exit 1
+          fi
 
-    - name: Install OpenShift CLI
-      run: |
-        curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
-        tar -xvf oc.tar.gz
-        sudo mv oc /usr/local/bin/
+          # Push all images
+          docker push ghcr.io/arash00009/guestbook-backend:${{ github.sha }}
+          docker push ghcr.io/arash00009/guestbook-backend:latest
+          docker push ghcr.io/arash00009/guestbook-frontend:${{ github.sha }}
+          docker push ghcr.io/arash00009/guestbook-frontend:latest
 
-    - name: Login to OpenShift
-      run: oc login --token=${{ secrets.OCP_TOKEN }} --insecure-skip-tls-verify --server=https://api.devops24.cloud2.se:6443
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+          tar -xzf oc.tar.gz
+          sudo mv oc /usr/local/bin/
+          rm oc.tar.gz
 
-    - name: Deploy on OpenShift
-      run: |
-        oc project test-miljo1
-        oc deployment\
-      
+      - name: Login to OpenShift
+        run: |
+          oc login \
+            --token=${{ secrets.OCP_TOKEN }} \
+            --insecure-skip-tls-verify \
+            --server=https://api.devops24.cloud2.se:6443
+
+      - name: Check deployment files exist
+        run: |
+          for file in config.yaml backend.yaml frontend.yaml secrets.yaml; do
+            if [ -f "$file" ]; then
+              echo "✅ $file exists"
+            else
+              echo "❌ $file not found"
+              echo "Available YAML files:"
+              find . -name "*.yaml" -o -name "*.yml" | sort
+            fi
+          done
+
+      - name: Deploy on OpenShift
+        run: |
+          oc project test-miljo2 || oc new-project test-miljo2
+          oc apply -f config.yaml
+          oc apply -f backend.yaml
+          oc apply -f frontend.yaml
+          oc apply -f secrets.yaml
