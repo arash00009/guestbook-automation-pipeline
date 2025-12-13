@@ -3,8 +3,6 @@ name: Build and Deploy
 on:
   push:
     branches: ["main"]
-permissions: 
-  contents: write
 
 jobs:
   build-and-deploy:
@@ -23,11 +21,11 @@ jobs:
 
     - name: Build app container
       run: |
-        docker build -f Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest ./backend
+        docker build -f backend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/guestbook:latest ./backend
 
     - name: Build redis container
       run: |
-        docker build -f Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest ./redis
+        docker build -f frontend/Containerfile -t ghcr.io/${{ secrets.GHCR_USERNAME }}/redis:latest ./frontend
 
     - name: Push containers
       run: |
@@ -45,6 +43,8 @@ jobs:
 
     - name: Deploy on OpenShift
       run: |
-        oc project test-miljo1
-        # Lägg till ditt deployment-kommando här, t.ex.
-        # oc apply -f secret.yaml
+        oc project test-miljo2
+        oc apply -f config.yaml
+        oc apply -f backend.yaml
+        oc apply -f frontend.yaml
+        oc apply -f secrets.yaml
