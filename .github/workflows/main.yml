@@ -1,0 +1,69 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          docker build -t frontend:${{ github.sha }} .
+
+      - name: Tag frontend image
+        run: |
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
+          docker tag frontend:${{ github.sha }} ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
+
+      - name: Build backend container
+        run: |
+          docker build -f backend/Containerfile \
+            -t ghcr.io/arash00009/guestbook:${{ github.sha }} \
+            -t ghcr.io/arash00009/guestbook:latest \
+            ./backend
+
+      - name: Push containers
+        run: |
+          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:${{ github.sha }}
+          docker push ghcr.io/arash00009/guestbook-automation-pipeline-frontend:latest
+          docker push ghcr.io/arash00009/guestbook:${{ github.sha }}
+          docker push ghcr.io/arash00009/guestbook:latest
+
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+          tar -xzf oc.tar.gz
+          sudo mv oc /usr/local/bin/
+          rm -f oc.tar.gz kubectl
+
+      - name: Login to OpenShift
+        run: |
+          oc login \
+            --token=${{ secrets.OCP_TOKEN }} \
+            --insecure-skip-tls-verify \
+            --server=https://api.devops24.cloud2.se:6443
+
+      - name: Deploy on OpenShift
+        run: |
+          oc project test-miljo2
+          oc apply -f config.yaml
+          oc apply -f backend.yaml
+          oc apply -f frontend.yaml
+          oc apply -f secrets.yaml
