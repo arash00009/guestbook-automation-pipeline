@@ -17,14 +17,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: List all files to verify
-        run: |
-          echo "=== All files in repository ==="
-          ls -la
-          echo ""
-          echo "=== YAML files ==="
-          find . -name "*.yaml" -o -name "*.yml" | sort
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -70,35 +62,23 @@ jobs:
         run: |
           oc project test-miljo1 || oc new-project test-miljo1
 
-      - name: Check and apply YAML files
+      - name: Create missing YAML files
         run: |
-          echo "=== Applying existing YAML files ==="
-          
-          # Skriv ut innehållet i config.yaml för debugging
-          echo "Contents of config.yaml:"
-          cat config.yaml
-          echo ""
-          
-          # Se om andra YAML filer finns
-          for file in *.yaml *.yml; do
-            if [ -f "$file" ]; then
-              echo "Found file: $file"
-            fi
-          done
-          
-          echo ""
-          echo "=== Applying config.yaml ==="
-          oc apply -f config.yaml
-          
-          # Kontrollera om backend.yaml och frontend.yaml finns
-          # Om inte, skapa dem med korrekt referens till db-config
+          # === Skapa config.yaml ===
+          cat > config.yaml << EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: guestbook-config
+data:
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  BACKEND_URL: "http://guestbook-backend:5000"
+EOF
+          echo "✅ Created config.yaml"
 
-      - name: Check backend and frontend YAML
-        run: |
-          # Om backend.yaml inte finns, skapa den
-          if [ ! -f "backend.yaml" ]; then
-            echo "Creating backend.yaml..."
-            cat > backend.yaml << EOF
+          # === Skapa backend.yaml ===
+          cat > backend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -118,17 +98,9 @@ spec:
         image: ghcr.io/arash00009/guestbook-backend:latest
         ports:
         - containerPort: 5000
-        env:
-        - name: REDIS_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: redis-host
-        - name: REDIS_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: redis-port
+        envFrom:
+        - configMapRef:
+            name: guestbook-config
 ---
 apiVersion: v1
 kind: Service
@@ -141,12 +113,10 @@ spec:
   - port: 5000
     targetPort: 5000
 EOF
-            echo "✅ Created backend.yaml"
-          fi
-          
-          if [ ! -f "frontend.yaml" ]; then
-            echo "Creating frontend.yaml..."
-            cat > frontend.yaml << EOF
+          echo "✅ Created backend.yaml"
+
+          # === Skapa frontend.yaml ===
+          cat > frontend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -180,42 +150,46 @@ spec:
   ports:
   - port: 3000
     targetPort: 3000
+  type: ClusterIP
 EOF
-            echo "✅ Created frontend.yaml"
-          fi
+          echo "✅ Created frontend.yaml"
 
-      - name: Deploy remaining YAML files
+          # === Skapa secrets.yaml ===
+          cat > secrets.yaml << EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: guestbook-secrets
+type: Opaque
+stringData:
+  SECRET_KEY: "change-this-in-production"
+EOF
+          echo "✅ Created secrets.yaml"
+
+      - name: Deploy to OpenShift
         run: |
-          echo "=== Applying backend.yaml ==="
+          echo "📦 Deploying to OpenShift..."
+          oc apply -f config.yaml
           oc apply -f backend.yaml
-          
-          echo "=== Applying frontend.yaml ==="
           oc apply -f frontend.yaml
-          
-          # Om secrets.yaml finns, applicera den
-          if [ -f "secrets.yaml" ]; then
-            echo "=== Applying secrets.yaml ==="
-            oc apply -f secrets.yaml
-          fi
+          oc apply -f secrets.yaml
 
-      - name: Verify deployment
+      - name: Create Routes (Optional)
         run: |
-          echo "=== Deployment status ==="
-          oc get pods
-          echo ""
-          echo "=== ConfigMaps ==="
-          oc get configmaps
-          echo ""
-          echo "=== Services ==="
-          oc get services
-
-      - name: Create routes if needed
-        run: |
-          # Skapa route för frontend
+          # Create route for frontend if not exists
           if ! oc get route guestbook-frontend 2>/dev/null; then
-            oc expose svc guestbook-frontend
+            oc expose service guestbook-frontend --port=3000
             echo "✅ Created route for frontend"
           fi
           
-          echo "=== Routes ==="
+          # Create route for backend if needed
+          if ! oc get route guestbook-backend 2>/dev/null; then
+            oc expose service guestbook-backend --port=5000
+            echo "✅ Created route for backend"
+          fi
+          
+          echo "📊 Deployment status:"
+          oc get pods
+          echo ""
+          echo "🌐 Routes:"
           oc get routes
