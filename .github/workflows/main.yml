@@ -17,14 +17,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: List files (Debugging)
+      - name: List all files to verify
         run: |
-          echo "Project structure:"
-          find . -name "Dockerfile" -o -name "Containerfile" -o -name "*.yaml" -o -name "*.yml" | sort
-          echo "Frontend directory contents:"
-          ls -la frontend/ || echo "No frontend directory"
-          echo "Backend directory contents:"
-          ls -la backend/ || echo "No backend directory"
+          echo "=== All files in repository ==="
+          ls -la
+          echo ""
+          echo "=== YAML files ==="
+          find . -name "*.yaml" -o -name "*.yml" | sort
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -33,44 +32,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push containers (Flexible approach)
+      - name: Build and push containers
         run: |
-          # Check what build files exist and use appropriate ones
-          if [ -f "backend/Dockerfile" ]; then
-            echo "Building backend using Dockerfile"
-            docker build -f backend/Dockerfile \
-              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
-              -t ghcr.io/arash00009/guestbook-backend:latest \
-              ./backend
-          elif [ -f "backend/Containerfile" ]; then
-            echo "Building backend using Containerfile"
-            docker build -f backend/Containerfile \
-              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
-              -t ghcr.io/arash00009/guestbook-backend:latest \
-              ./backend
-          else
-            echo "ERROR: No Dockerfile or Containerfile found in backend/"
-            exit 1
-          fi
-
-          if [ -f "frontend/Dockerfile" ]; then
-            echo "Building frontend using Dockerfile"
-            docker build -f frontend/Dockerfile \
-              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
-              -t ghcr.io/arash00009/guestbook-frontend:latest \
-              ./frontend
-          elif [ -f "frontend/Containerfile" ]; then
-            echo "Building frontend using Containerfile"
-            docker build -f frontend/Containerfile \
-              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
-              -t ghcr.io/arash00009/guestbook-frontend:latest \
-              ./frontend
-          else
-            echo "ERROR: No Dockerfile or Containerfile found in frontend/"
-            exit 1
-          fi
-
-          # Push all images
+          # Backend
+          docker build \
+            -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+            -t ghcr.io/arash00009/guestbook-backend:latest \
+            ./backend
+          
+          # Frontend
+          docker build \
+            -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+            -t ghcr.io/arash00009/guestbook-frontend:latest \
+            ./frontend
+          
+          # Push
           docker push ghcr.io/arash00009/guestbook-backend:${{ github.sha }}
           docker push ghcr.io/arash00009/guestbook-backend:latest
           docker push ghcr.io/arash00009/guestbook-frontend:${{ github.sha }}
@@ -90,22 +66,156 @@ jobs:
             --insecure-skip-tls-verify \
             --server=https://api.devops24.cloud2.se:6443
 
-      - name: Check deployment files exist
-        run: |
-          for file in config.yaml backend.yaml frontend.yaml secrets.yaml; do
-            if [ -f "$file" ]; then
-              echo "✅ $file exists"
-            else
-              echo "❌ $file not found"
-              echo "Available YAML files:"
-              find . -name "*.yaml" -o -name "*.yml" | sort
-            fi
-          done
-
-      - name: Deploy on OpenShift
+      - name: Switch to test-miljo1 project
         run: |
           oc project test-miljo1 || oc new-project test-miljo1
+
+      - name: Check and apply YAML files
+        run: |
+          echo "=== Applying existing YAML files ==="
+          
+          # Skriv ut innehållet i config.yaml för debugging
+          echo "Contents of config.yaml:"
+          cat config.yaml
+          echo ""
+          
+          # Se om andra YAML filer finns
+          for file in *.yaml *.yml; do
+            if [ -f "$file" ]; then
+              echo "Found file: $file"
+            fi
+          done
+          
+          echo ""
+          echo "=== Applying config.yaml ==="
           oc apply -f config.yaml
+          
+          # Kontrollera om backend.yaml och frontend.yaml finns
+          # Om inte, skapa dem med korrekt referens till db-config
+
+      - name: Check backend and frontend YAML
+        run: |
+          # Om backend.yaml inte finns, skapa den
+          if [ ! -f "backend.yaml" ]; then
+            echo "Creating backend.yaml..."
+            cat > backend.yaml << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guestbook-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guestbook-backend
+  template:
+    metadata:
+      labels:
+        app: guestbook-backend
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/arash00009/guestbook-backend:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: db-config
+              key: redis-host
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: db-config
+              key: redis-port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guestbook-backend
+spec:
+  selector:
+    app: guestbook-backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+EOF
+            echo "✅ Created backend.yaml"
+          fi
+          
+          if [ ! -f "frontend.yaml" ]; then
+            echo "Creating frontend.yaml..."
+            cat > frontend.yaml << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guestbook-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guestbook-frontend
+  template:
+    metadata:
+      labels:
+        app: guestbook-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: ghcr.io/arash00009/guestbook-frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://guestbook-backend:5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guestbook-frontend
+spec:
+  selector:
+    app: guestbook-frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+EOF
+            echo "✅ Created frontend.yaml"
+          fi
+
+      - name: Deploy remaining YAML files
+        run: |
+          echo "=== Applying backend.yaml ==="
           oc apply -f backend.yaml
+          
+          echo "=== Applying frontend.yaml ==="
           oc apply -f frontend.yaml
-          oc apply -f secrets.yaml
+          
+          # Om secrets.yaml finns, applicera den
+          if [ -f "secrets.yaml" ]; then
+            echo "=== Applying secrets.yaml ==="
+            oc apply -f secrets.yaml
+          fi
+
+      - name: Verify deployment
+        run: |
+          echo "=== Deployment status ==="
+          oc get pods
+          echo ""
+          echo "=== ConfigMaps ==="
+          oc get configmaps
+          echo ""
+          echo "=== Services ==="
+          oc get services
+
+      - name: Create routes if needed
+        run: |
+          # Skapa route för frontend
+          if ! oc get route guestbook-frontend 2>/dev/null; then
+            oc expose svc guestbook-frontend
+            echo "✅ Created route for frontend"
+          fi
+          
+          echo "=== Routes ==="
+          oc get routes
