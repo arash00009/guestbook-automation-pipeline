@@ -104,7 +104,7 @@ jobs:
 
       - name: Deploy on OpenShift
         run: |
-          oc project test-miljo2 || oc new-project test-miljo2
+          oc project test-miljo1 || oc new-project test-miljo1
           oc apply -f config.yaml
           oc apply -f backend.yaml
           oc apply -f frontend.yaml
