@@ -1,3 +1,4 @@
+
 name: Build and Deploy
 
 on:
@@ -105,7 +106,7 @@ jobs:
       - name: Deploy on OpenShift
         run: |
           oc project test-miljo2 || oc new-project test-miljo2
-          oc apply -f config.yaml
           oc apply -f backend.yaml
+          oc apply -f config.yaml
           oc apply -f frontend.yaml
           oc apply -f secrets.yaml
