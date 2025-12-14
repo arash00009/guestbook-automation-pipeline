@@ -1,8 +1,4 @@
-Här är ett förslag på en professionell `README.md`. Jag har strukturerat om innehållet för att lyfta fram din tekniska kompetens, lagt till snyggare formatering och inkluderat en sektion för ditt nyskapade **GitHub Actions CI/CD-workflow**.
 
-Denna version är designad för att imponera på rekryterare och tekniska kollegor genom att visa att du har koll på hela kedjan: från arkitektur till automatisering.
-
----
 
 # Cloud-Native Guestbook: OpenShift Distributed System
 
