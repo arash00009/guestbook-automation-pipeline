@@ -17,6 +17,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: List all files for debugging
+        run: |
+          echo "=== All files in repository ==="
+          find . -type f -name "*.yaml" -o -name "*.yml" -o -name "*.yaml.tpl" | sort
+          echo ""
+          echo "=== Directory structure ==="
+          ls -la
+          echo ""
+          echo "=== Files that might be deployment files ==="
+          find . -type f \( -name "*.yaml" -o -name "*.yml" \) -exec ls -la {} \;
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -26,19 +37,43 @@ jobs:
 
       - name: Build and push containers
         run: |
-          # Backend
-          docker build \
-            -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
-            -t ghcr.io/arash00009/guestbook-backend:latest \
-            ./backend
-          
-          # Frontend
-          docker build \
-            -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
-            -t ghcr.io/arash00009/guestbook-frontend:latest \
-            ./frontend
-          
-          # Push
+          # Check and build backend
+          if [ -f "backend/Dockerfile" ]; then
+            docker build -f backend/Dockerfile \
+              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-backend:latest \
+              ./backend
+          elif [ -f "backend/Containerfile" ]; then
+            docker build -f backend/Containerfile \
+              -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-backend:latest \
+              ./backend
+          else
+            echo "Building backend from root Dockerfile"
+            docker build -t ghcr.io/arash00009/guestbook-backend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-backend:latest \
+              -f Dockerfile.backend .
+          fi
+
+          # Check and build frontend
+          if [ -f "frontend/Dockerfile" ]; then
+            docker build -f frontend/Dockerfile \
+              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-frontend:latest \
+              ./frontend
+          elif [ -f "frontend/Containerfile" ]; then
+            docker build -f frontend/Containerfile \
+              -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-frontend:latest \
+              ./frontend
+          else
+            echo "Building frontend from root Dockerfile"
+            docker build -t ghcr.io/arash00009/guestbook-frontend:${{ github.sha }} \
+              -t ghcr.io/arash00009/guestbook-frontend:latest \
+              -f Dockerfile.frontend .
+          fi
+
+          # Push all images
           docker push ghcr.io/arash00009/guestbook-backend:${{ github.sha }}
           docker push ghcr.io/arash00009/guestbook-backend:latest
           docker push ghcr.io/arash00009/guestbook-frontend:${{ github.sha }}
@@ -58,27 +93,32 @@ jobs:
             --insecure-skip-tls-verify \
             --server=https://api.devops24.cloud2.se:6443
 
-      - name: Switch to test-miljo1 project
+      - name: Create or use OpenShift project
         run: |
-          oc project test-miljo1 || oc new-project test-miljo1
+          oc project test-miljo2 || oc new-project test-miljo2
 
-      - name: Create missing YAML files
+      - name: Check for deployment files and create if missing
         run: |
-          # === Skapa config.yaml ===
-          cat > config.yaml << EOF
+          echo "=== Checking for deployment files ==="
+          
+          # Check and create config.yaml if missing
+          if [ ! -f "config.yaml" ]; then
+            echo "Creating config.yaml..."
+            cat > config.yaml << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: guestbook-config
 data:
-  APP_ENV: "production"
-  APP_DEBUG: "false"
-  BACKEND_URL: "http://guestbook-backend:5000"
+  APP_NAME: "Guestbook App"
+  ENVIRONMENT: "production"
 EOF
-          echo "✅ Created config.yaml"
-
-          # === Skapa backend.yaml ===
-          cat > backend.yaml << EOF
+          fi
+          
+          # Check and create backend.yaml if missing
+          if [ ! -f "backend.yaml" ]; then
+            echo "Creating backend.yaml..."
+            cat > backend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,13 +134,13 @@ spec:
         app: guestbook-backend
     spec:
       containers:
-      - name: backend
+      - name: guestbook-backend
         image: ghcr.io/arash00009/guestbook-backend:latest
         ports:
         - containerPort: 5000
-        envFrom:
-        - configMapRef:
-            name: guestbook-config
+        env:
+        - name: REDIS_HOST
+          value: "guestbook-redis"
 ---
 apiVersion: v1
 kind: Service
@@ -113,10 +153,12 @@ spec:
   - port: 5000
     targetPort: 5000
 EOF
-          echo "✅ Created backend.yaml"
-
-          # === Skapa frontend.yaml ===
-          cat > frontend.yaml << EOF
+          fi
+          
+          # Check and create frontend.yaml if missing
+          if [ ! -f "frontend.yaml" ]; then
+            echo "Creating frontend.yaml..."
+            cat > frontend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -132,13 +174,10 @@ spec:
         app: guestbook-frontend
     spec:
       containers:
-      - name: frontend
+      - name: guestbook-frontend
         image: ghcr.io/arash00009/guestbook-frontend:latest
         ports:
         - containerPort: 3000
-        env:
-        - name: REACT_APP_API_URL
-          value: "http://guestbook-backend:5000"
 ---
 apiVersion: v1
 kind: Service
@@ -152,44 +191,50 @@ spec:
     targetPort: 3000
   type: ClusterIP
 EOF
-          echo "✅ Created frontend.yaml"
-
-          # === Skapa secrets.yaml ===
-          cat > secrets.yaml << EOF
+          fi
+          
+          # Check and create secrets.yaml if missing
+          if [ ! -f "secrets.yaml" ]; then
+            echo "Creating secrets.yaml..."
+            cat > secrets.yaml << EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: guestbook-secrets
 type: Opaque
 stringData:
-  SECRET_KEY: "change-this-in-production"
+  DATABASE_URL: "postgresql://user:password@localhost/db"
+  API_KEY: "your-api-key-here"
 EOF
-          echo "✅ Created secrets.yaml"
+          fi
+          
+          echo "=== Listing created files ==="
+          ls -la *.yaml
 
-      - name: Deploy to OpenShift
+      - name: Deploy on OpenShift
         run: |
-          echo "📦 Deploying to OpenShift..."
+          echo "Applying configuration files..."
           oc apply -f config.yaml
           oc apply -f backend.yaml
           oc apply -f frontend.yaml
           oc apply -f secrets.yaml
-
-      - name: Create Routes (Optional)
-        run: |
-          # Create route for frontend if not exists
-          if ! oc get route guestbook-frontend 2>/dev/null; then
-            oc expose service guestbook-frontend --port=3000
-            echo "✅ Created route for frontend"
-          fi
           
-          # Create route for backend if needed
-          if ! oc get route guestbook-backend 2>/dev/null; then
-            oc expose service guestbook-backend --port=5000
-            echo "✅ Created route for backend"
-          fi
-          
-          echo "📊 Deployment status:"
+          echo "=== Deployment status ==="
           oc get pods
-          echo ""
-          echo "🌐 Routes:"
+          oc get services
+          oc get deployments
+
+      - name: Expose services
+        run: |
+          # Expose backend service if not already exposed
+          if ! oc get route guestbook-backend 2>/dev/null; then
+            oc expose service guestbook-backend
+          fi
+          
+          # Expose frontend service if not already exposed
+          if ! oc get route guestbook-frontend 2>/dev/null; then
+            oc expose service guestbook-frontend
+          fi
+          
+          echo "=== Routes ==="
           oc get routes
