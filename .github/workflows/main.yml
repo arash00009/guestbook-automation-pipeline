@@ -1,3 +1,4 @@
+
 name: Build and Deploy
 
 on:
@@ -21,15 +22,10 @@ jobs:
         run: |
           echo "Project structure:"
           find . -name "Dockerfile" -o -name "Containerfile" -o -name "*.yaml" -o -name "*.yml" | sort
-          echo ""
-          echo "Config.yaml exists check:"
-          if [ -f "config.yaml" ]; then
-            echo "✅ config.yaml found in root directory"
-          elif [ -f ".github/workflows/config.yaml" ]; then
-            echo "⚠️  config.yaml found in .github/workflows/ (might need to move)"
-          else
-            echo "❌ config.yaml not found anywhere"
-          fi
+          echo "Frontend directory contents:"
+          ls -la frontend/ || echo "No frontend directory"
+          echo "Backend directory contents:"
+          ls -la backend/ || echo "No backend directory"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -95,220 +91,22 @@ jobs:
             --insecure-skip-tls-verify \
             --server=https://api.devops24.cloud2.se:6443
 
-      - name: Check or move config.yaml
+      - name: Check deployment files exist
         run: |
-          # Flytta config.yaml från .github/workflows/ till root om den är där
-          if [ -f ".github/workflows/config.yaml" ] && [ ! -f "config.yaml" ]; then
-            echo "Moving config.yaml from .github/workflows/ to root..."
-            mv .github/workflows/config.yaml .
-            echo "✅ config.yaml moved to root"
-          fi
-          
-          echo "Current location of config.yaml:"
-          find . -name "config.yaml" 2>/dev/null || echo "Not found"
+          for file in config.yaml backend.yaml frontend.yaml secrets.yaml; do
+            if [ -f "$file" ]; then
+              echo "✅ $file exists"
+            else
+              echo "❌ $file not found"
+              echo "Available YAML files:"
+              find . -name "*.yaml" -o -name "*.yml" | sort
+            fi
+          done
 
-      - name: Check and create missing YAML files
+      - name: Deploy on OpenShift
         run: |
-          echo "=== Checking for required YAML files ==="
-          
-          # 1. Check config.yaml
-          if [ ! -f "config.yaml" ]; then
-            echo "Creating config.yaml..."
-            cat > config.yaml << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: db-config
-data:
-  db-name: guestbook
-  db-host: postgres
-  redis-host: redis
-  redis-port: "6379"
-EOF
-            echo "✅ Created config.yaml"
-          else
-            echo "✅ config.yaml already exists"
-          fi
-
-          # 2. Check backend.yaml
-          if [ ! -f "backend.yaml" ]; then
-            echo "Creating backend.yaml..."
-            cat > backend.yaml << EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: guestbook-backend
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: guestbook-backend
-  template:
-    metadata:
-      labels:
-        app: guestbook-backend
-    spec:
-      containers:
-      - name: backend
-        image: ghcr.io/arash00009/guestbook-backend:latest
-        ports:
-        - containerPort: 5000
-        env:
-        - name: REDIS_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: redis-host
-        - name: REDIS_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: redis-port
-        - name: POSTGRES_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: db-host
-        - name: POSTGRES_DB
-          valueFrom:
-            configMapKeyRef:
-              name: db-config
-              key: db-name
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: guestbook-backend
-spec:
-  selector:
-    app: guestbook-backend
-  ports:
-  - port: 5000
-    targetPort: 5000
-EOF
-            echo "✅ Created backend.yaml"
-          else
-            echo "✅ backend.yaml already exists"
-          fi
-
-          # 3. Check frontend.yaml
-          if [ ! -f "frontend.yaml" ]; then
-            echo "Creating frontend.yaml..."
-            cat > frontend.yaml << EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: guestbook-frontend
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: guestbook-frontend
-  template:
-    metadata:
-      labels:
-        app: guestbook-frontend
-    spec:
-      containers:
-      - name: frontend
-        image: ghcr.io/arash00009/guestbook-frontend:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: REACT_APP_BACKEND_URL
-          value: "http://guestbook-backend:5000"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: guestbook-frontend
-spec:
-  selector:
-    app: guestbook-frontend
-  ports:
-  - port: 3000
-    targetPort: 3000
-  type: ClusterIP
-EOF
-            echo "✅ Created frontend.yaml"
-          else
-            echo "✅ frontend.yaml already exists"
-          fi
-
-          # 4. Check secrets.yaml (optional)
-          if [ ! -f "secrets.yaml" ]; then
-            echo "Creating secrets.yaml..."
-            cat > secrets.yaml << EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: guestbook-secrets
-type: Opaque
-stringData:
-  DATABASE_PASSWORD: "guestbook123"
-  SECRET_KEY: "change-in-production"
-EOF
-            echo "✅ Created secrets.yaml"
-          else
-            echo "✅ secrets.yaml already exists"
-          fi
-
-          echo ""
-          echo "=== All YAML files ready ==="
-          ls -la *.yaml
-
-      - name: Deploy to OpenShift
-        run: |
-          echo "=== Setting project ==="
-          # Din felmeddelande sa test-miljo1, men din workflow säger test-miljo2
-          # Jag behåller test-miljo2 som i din workflow
           oc project test-miljo2 || oc new-project test-miljo2
-          
-          echo "=== Applying manifests ==="
-          oc apply -f config.yaml
           oc apply -f backend.yaml
+          oc apply -f config.yaml
           oc apply -f frontend.yaml
           oc apply -f secrets.yaml
-          
-          echo "=== Deployment complete ==="
-          echo ""
-          sleep 5  # Small wait for pods to start
-
-      - name: Verify deployment
-        run: |
-          echo "=== Deployment Status ==="
-          echo "Pods:"
-          oc get pods
-          echo ""
-          echo "Services:"
-          oc get services
-          echo ""
-          echo "ConfigMaps:"
-          oc get configmaps
-          echo ""
-          echo "Deployments:"
-          oc get deployments
-
-      - name: Create routes for external access
-        run: |
-          echo "=== Creating routes ==="
-          
-          # Create route for frontend
-          if ! oc get route guestbook-frontend 2>/dev/null; then
-            echo "Creating route for frontend..."
-            oc expose svc guestbook-frontend
-          else
-            echo "Frontend route already exists"
-          fi
-          
-          # Create route for backend (optional)
-          if ! oc get route guestbook-backend 2>/dev/null; then
-            echo "Creating route for backend..."
-            oc expose svc guestbook-backend
-          else
-            echo "Backend route already exists"
-          fi
-          
-          echo ""
-          echo "=== Routes ==="
-          oc get routes
