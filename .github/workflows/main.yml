@@ -17,19 +17,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug - Show file structure
+      - name: List all files to verify
         run: |
-          echo "=== Current directory structure ==="
-          pwd
+          echo "=== All files in repository ==="
           ls -la
           echo ""
-          echo "=== Looking for config.yaml ==="
-          find . -name "config.yaml" -type f
-          echo ""
-          echo "=== Contents of .github/workflows/ ==="
-          ls -la .github/workflows/
-          echo ""
-          echo "=== YAML files in repository ==="
+          echo "=== YAML files ==="
           find . -name "*.yaml" -o -name "*.yml" | sort
 
       - name: Login to GHCR
@@ -77,34 +70,34 @@ jobs:
         run: |
           oc project test-miljo1 || oc new-project test-miljo1
 
-      - name: Deploy Kubernetes/OpenShift manifests (Correct paths)
+      - name: Check and apply YAML files
         run: |
-          echo "=== Deploying Manifests ==="
+          echo "=== Applying existing YAML files ==="
           
-          # Hitta och applicera config.yaml oavsett var den ligger
-          if [ -f ".github/workflows/config.yaml" ]; then
-            echo "Found config.yaml in .github/workflows/"
-            oc apply -f .github/workflows/config.yaml
-          elif [ -f "config.yaml" ]; then
-            echo "Found config.yaml in root"
-            oc apply -f config.yaml
-          else
-            echo "ERROR: No config.yaml found!"
-            exit 1
-          fi
+          # Skriv ut innehållet i config.yaml för debugging
+          echo "Contents of config.yaml:"
+          cat config.yaml
+          echo ""
           
-          # Hitta och applicera andra deployment filer
-          # Titta först i root, sedan i k8s/ mapp om den finns
+          # Se om andra YAML filer finns
+          for file in *.yaml *.yml; do
+            if [ -f "$file" ]; then
+              echo "Found file: $file"
+            fi
+          done
           
-          # Backend deployment
-          if [ -f "backend.yaml" ]; then
-            oc apply -f backend.yaml
-          elif [ -f "k8s/backend.yaml" ]; then
-            oc apply -f k8s/backend.yaml
-          elif [ -f "deploy/backend.yaml" ]; then
-            oc apply -f deploy/backend.yaml
-          else
-            echo "Creating backend.yaml since it doesn't exist..."
+          echo ""
+          echo "=== Applying config.yaml ==="
+          oc apply -f config.yaml
+          
+          # Kontrollera om backend.yaml och frontend.yaml finns
+          # Om inte, skapa dem med korrekt referens till db-config
+
+      - name: Check backend and frontend YAML
+        run: |
+          # Om backend.yaml inte finns, skapa den
+          if [ ! -f "backend.yaml" ]; then
+            echo "Creating backend.yaml..."
             cat > backend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -127,13 +120,15 @@ spec:
         - containerPort: 5000
         env:
         - name: REDIS_HOST
-          value: redis
+          valueFrom:
+            configMapKeyRef:
+              name: db-config
+              key: redis-host
         - name: REDIS_PORT
-          value: "6379"
-        - name: POSTGRES_HOST
-          value: postgres
-        - name: POSTGRES_DB
-          value: guestbook
+          valueFrom:
+            configMapKeyRef:
+              name: db-config
+              key: redis-port
 ---
 apiVersion: v1
 kind: Service
@@ -146,18 +141,11 @@ spec:
   - port: 5000
     targetPort: 5000
 EOF
-            oc apply -f backend.yaml
+            echo "✅ Created backend.yaml"
           fi
           
-          # Frontend deployment
-          if [ -f "frontend.yaml" ]; then
-            oc apply -f frontend.yaml
-          elif [ -f "k8s/frontend.yaml" ]; then
-            oc apply -f k8s/frontend.yaml
-          elif [ -f "deploy/frontend.yaml" ]; then
-            oc apply -f deploy/frontend.yaml
-          else
-            echo "Creating frontend.yaml since it doesn't exist..."
+          if [ ! -f "frontend.yaml" ]; then
+            echo "Creating frontend.yaml..."
             cat > frontend.yaml << EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -179,7 +167,7 @@ spec:
         ports:
         - containerPort: 3000
         env:
-        - name: REACT_APP_BACKEND_URL
+        - name: REACT_APP_API_URL
           value: "http://guestbook-backend:5000"
 ---
 apiVersion: v1
@@ -193,24 +181,41 @@ spec:
   - port: 3000
     targetPort: 3000
 EOF
-            oc apply -f frontend.yaml
+            echo "✅ Created frontend.yaml"
           fi
+
+      - name: Deploy remaining YAML files
+        run: |
+          echo "=== Applying backend.yaml ==="
+          oc apply -f backend.yaml
           
-          # Secrets (om den finns)
+          echo "=== Applying frontend.yaml ==="
+          oc apply -f frontend.yaml
+          
+          # Om secrets.yaml finns, applicera den
           if [ -f "secrets.yaml" ]; then
+            echo "=== Applying secrets.yaml ==="
             oc apply -f secrets.yaml
-          elif [ -f ".github/workflows/secrets.yaml" ]; then
-            oc apply -f .github/workflows/secrets.yaml
           fi
 
       - name: Verify deployment
         run: |
-          echo "=== Checking deployment ==="
-          sleep 10  # Vänta lite på att poddar ska starta
-          oc get all
-          echo ""
-          echo "=== Pod status ==="
+          echo "=== Deployment status ==="
           oc get pods
+          echo ""
+          echo "=== ConfigMaps ==="
+          oc get configmaps
           echo ""
           echo "=== Services ==="
           oc get services
+
+      - name: Create routes if needed
+        run: |
+          # Skapa route för frontend
+          if ! oc get route guestbook-frontend 2>/dev/null; then
+            oc expose svc guestbook-frontend
+            echo "✅ Created route for frontend"
+          fi
+          
+          echo "=== Routes ==="
+          oc get routes
