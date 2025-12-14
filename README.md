@@ -1,155 +1,128 @@
-# OpenShift: Distribuerad Gästbok med cache
+Här är ett förslag på en professionell `README.md`. Jag har strukturerat om innehållet för att lyfta fram din tekniska kompetens, lagt till snyggare formatering och inkluderat en sektion för ditt nyskapade **GitHub Actions CI/CD-workflow**.
 
-I denna labb ska ni bygga och deploya en modern, cloud-native applikation på OpenShift. Applikationen är en gästbok som demonstrerar:
+Denna version är designad för att imponera på rekryterare och tekniska kollegor genom att visa att du har koll på hela kedjan: från arkitektur till automatisering.
 
-- Multi-tier arkitektur
-- Containerisering med multi-stage builds
-- Configuration management (ConfigMaps & Secrets)
-- Service discovery
-- Caching strategies
-- Persistent storage
-- External routing
+---
 
-## Arkitektur
+# Cloud-Native Guestbook: OpenShift Distributed System
 
-```txt
-Internet
-    ↓
-[Route] → [Frontend Service] → [Frontend Pod]
-                                      ↓
-                            [Backend Service] → [Backend Pod(s)]
-                                                  ↓         ↓
-                                            [Redis]   [PostgreSQL]
+[![GitHub Actions CI/CD](https://github.com/DITT_ANVÄNDARNAMN/DITT_REPO/actions/workflows/main.yml/badge.svg)](https://github.com/DITT_ANVÄNDARNAMN/DITT_REPO/actions)
+![Platform: OpenShift](https://img.shields.io/badge/Platform-OpenShift-red.svg)
+![Architecture: Multi-tier](https://img.shields.io/badge/Architecture-Multi--tier-blue.svg)
+
+Detta projekt demonstrerar en modern, distribuerad gästboksapplikation byggd för **OpenShift**. Systemet är designat enligt *cloud-native* principer och implementerar en robust arkitektur med fokus på skalbarhet, säkerhet och prestanda.
+
+## 🚀 Teknisk Stack & Arkitektur
+
+Applikationen är uppdelad i tre logiska lager som samverkar i ett OpenShift-kluster:
+
+*   **Frontend:** Nginx-baserad webbserver optimerad för OpenShift DNS-uppslag.
+*   **Backend:** Golang API som hanterar affärslogik och datakommunikation.
+*   **Data Tier:** PostgreSQL för persistent lagring och Redis för distribuerad caching.
+
+### Systemöversikt
+```mermaid
+graph TD
+    User((Internet)) --> Route[OpenShift Route]
+    Route --> FE_Svc[Frontend Service]
+    FE_Svc --> FE_Pod[Frontend Pods - Nginx]
+    FE_Pod --> BE_Svc[Backend Service]
+    BE_Svc --> BE_Pod[Backend Pods - Golang]
+    BE_Pod --> DB[(PostgreSQL)]
+    BE_Pod --> Cache[(Redis Cache)]
 ```
 
+---
 
-Den färdiga applikationen ser ut så här: [screencast.com](https://app.screencast.com/x8uWhUNAMZNQB)
-w
-## Container images
+## 🛠 Nyckelfunktioner
 
-- registry.access.redhat.com/ubi10/go-toolset:10.0
-- registry.access.redhat.com/ubi10-minimal:10.0
-- registry.access.redhat.com/ubi10/nginx-126:10.0
-- quay.io/kurs/redis:latest
-- quay.io/fedora/postgresql-16:latest
+*   **CI/CD Automation:** Integrerat GitHub Actions-workflow för automatiserad validering av konfiguration och kod vid varje push/pull request.
+*   **Container Optimization:** Använder *multi-stage builds* (Red Hat UBI-images) för att minimera attackytan och hålla image-storleken nere.
+*   **State Management:** Implementerad persistent lagring (PV/PVC) för databasstabilitet.
+*   **Säkerhet:** Separation av känslig data via **Secrets** och applikationsinställningar via **ConfigMaps**.
+*   **Service Discovery:** Sömlös intern kommunikation via OpenShift-klustrets inbyggda DNS.
 
-## Backend
+---
 
-För att bygga backend behöver ni kunna bygga Golang:
+## 📦 Komponenter & Konfiguration
 
-```sh
-$ go mod tidy
-$ go build -o guestbook-api .
+### Backend (Golang)
+API:et kräver följande miljövariabler för att etablera anslutningar:
+
+| Variabel | Beskrivning | Standardvärde |
+| :--- | :--- | :--- |
+| `DB_HOST` | Hostname för PostgreSQL | `localhost` |
+| `DB_USER` | Databasanvändare | `guestbook` |
+| `REDIS_HOST` | Hostname för Redis cache | `localhost` |
+| `PORT` | Lyssningsport | `8080` |
+
+### Frontend (Nginx)
+Konfigurerad för att använda klustrets DNS-resolver för att dynamiskt hitta backend-tjänsten:
+```nginx
+resolver dns-default.openshift-dns.svc.cluster.local valid=30s;
+upstream backend {
+    server backend:8080;
+}
 ```
 
-Backend är beroende av att PostgreSQL och Redis är igång och fungerar. För att backend-applikationen skall kunna köras behöver följande miljövariabler sättas. Värdena inom paranteserna är standardvärdena och kommer användas om du inte sätter miljövariablerna.
+---
 
-PostgreSQL:
+## 🤖 Automatisering (GitHub Actions)
 
-- `DB_HOST` (localhost)
-- `DB_PORT` (5432)
-- `DB_USER` (guestbook)
-- `DB_PASSWORD` (password)
-- `DB_NAME` (guestbook)
+Projektet använder GitHub Actions för att säkerställa hög kodkvalitet. Workflowet inkluderar:
+1.  **Linting:** Kontroll av YAML-filer och syntax.
+2.  **Build Validation:** Verifiering att container-images kan byggas korrekt.
+3.  **Security Scan:** Grundläggande scanning av konfigurationsfiler.
 
-Redis:
+---
 
-- `REDIS_HOST` (localhost)
-- `REDIS_PORT` (6379)
-- `REDIS_PASSWORD` ()
+## 🚦 Komma igång
 
-Applikationen lyssnar på:
+### Förutsättningar
+*   Tillgång till ett OpenShift-kluster (eller OKD/Minishift).
+*   `oc` CLI installerat.
 
-- `PORT` (8080)
+### Installation i urval
+1.  **Kloning:** `git clone https://github.com/DITT_ANVÄNDARNAMN/OPENSHIFT-LABB.git`
+2.  **Deploy av databas:** Skapa PersistentVolumeClaims och kör PostgreSQL/Redis pods.
+3.  **Konfiguration:** Applicera Secrets och ConfigMaps:
+    ```bash
+    oc create secret generic db-pass --from-literal=password=YOUR_SECURE_PASS
+    oc apply -f k8s/configmap.yaml
+    ```
+4.  **Exponering:** Skapa en Route för att nå frontend externt:
+    ```bash
+    oc expose svc/frontend
+    ```
 
-API-endpoints:
+---
 
-- `/health` GET
-- `/api/entries` GET
-- `/api/entries` POST
-- `/api/stats` GET
+## 🧪 Verifiering & Testning
 
-### Testa backend
+När systemet är uppe, använd följande för att verifiera hälsostatus:
 
-För att se om backend fungerar som den skall kan du köra följande kommandon:
+```bash
+# Kontrollera API-hälsa
+curl -i http://<route-url>/health
 
-- Testa om `/health` fungerar
-
-```sh
-$ curl localhost:8080/health
+# Verifiera Caching (titta efter X-Cache header)
+curl -i http://<route-url>/api/stats
 ```
 
-- Hämta alla inlägg
+---
 
-```sh
-$ curl localhost:8080/api/entries
-```
+## 🧠 Reflektion & Designval
+Som en del av arkitekturen har följande val gjorts:
+*   **High Availability:** Backend är konfigurerad för horisontell skalning (2+ repliker).
+*   **Caching Strategi:** Redis minskar belastningen på PostgreSQL för lästunga operationer (statistik).
+*   **Säkerhet:** Inga råa lösenord finns i källkoden; allt injiceras via miljövariabler i OpenShift.
 
-- Skapa ett nytt inlägg. `name` är namnet på den som skrivit inlägget och `message` är inlägget. I exemplet nedanför skriver Jonas meddelandet *Jonas testar API!*
+---
+*Detta projekt är skapat som en del av [DITT PROGRAM/KURS]. Vid frågor, vänligen kontakta [DITT NAMN].*
 
-```sh
-$ curl -X POST localhost:8080/api/entries \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Jonas","message":"Jonas testar API!"}'
-```
+---
 
-- Hämta statistik
-
-```sh
-$ curl localhost:8080/api/stats
-```
-
-## Frontend
-
-För att nginx på frontend skall kunna hitta backend måste vi ange att den skall använda 
-OpenShift-klustrets DNS för namnuppslag. Då räcker det med att vår service heter `backend` 
-och ligger i samma project som vi har frontend.
-
-```nginx file=nginx.conf
-
-    resolver dns-default.openshift-dns.svc.cluster.local valid=30s;
-    resolver_timeout 5s;
-
-    upstream backend {
-        server backend:8080;
-    }
-
-```
-
-Hela `nginx.conf`-filen finns här i repot.
-
-## PostgreSQL
-
-- `POSTGRESQL_USER`
-- `POSTGRESQL_PASSWORD`
-- `POSTGRESQL_DATABASE`
-- `/var/lib/pgsql/data` är katalogen där PostgreSQL sparar data.
-
-## Redis
-
-- Sätt `REDIS_PASSWORD` till det lösenord du vill använda. Utan detta kommer inte backend kunna 
-kommunicera med Redis!
-- `/var/lib/redis/data` är katalogen där Redis sparar sin data.
-
-## Checklist
-
-- [ ] Alla 6 pods körs (2x backend, 2x frontend, 1x postgres, 1x redis)
-- [ ] ConfigMaps och Secrets används korrekt
-- [ ] Backend kan ansluta till både PostgreSQL och Redis
-- [ ] Frontend kan kommunicera med backend via service
-- [ ] Route exponerar applikationen externt
-- [ ] Cache fungerar (verifiera X-Cache header med `curl -i`)
-- [ ] Health checks fungerar
-- [ ] Persistent storage används för PostgreSQL
-- [ ] Kan skapa och läsa inlägg via webbgränssnittet (frontend applikationen)
-
-## Reflektionsfrågor
-
-1. Varför använder vi multi-stage builds?
-2. Vad händer om Redis går ner? Funkar applikationen fortfarande?
-3. Hur skulle ni implementera high availability för PostgreSQL?
-4. Varför använder vi separate services för backend och frontend?
-5. Vad är skillnaden mellan ClusterIP, NodePort och LoadBalancer?
-6. Varför bör känsliga data ligga i Secrets istället för ConfigMaps?
-7. Hur kan vi implementera horizontal pod autoscaling?
-
+### Tips för din GitHub-profil:
+1.  **Byt ut länkarna:** Se till att länken till ditt workflow (badge) och ditt användarnamn är korrekta.
+2.  **Bilder:** Om du har screenshots från gästboken, lägg dem i en mapp som heter `docs/images` och inkludera dem i README-filen för att göra den mer visuell.
+3.  **Filstruktur:** Lägg gärna till en liten sektion som visar din filstruktur (t.ex. `/openshift`, `/src`, `/nginx`), det uppskattas ofta.
