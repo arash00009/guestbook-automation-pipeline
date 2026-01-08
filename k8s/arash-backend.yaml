@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: postgres-pvc
+  name: arash-postgres-pvc
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: 5Gi
   storageClassName: gp3
 ---
 apiVersion: apps/v1
@@ -19,11 +19,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app: arash-guestbook
   template:
     metadata:
       labels:
-        app: postgres
+        app: arash-garash-guestbook
     spec:
       containers:
         - name: postgres
