@@ -114,11 +114,6 @@ Som en del av arkitekturen har följande val gjorts:
 *   **Säkerhet:** Inga råa lösenord finns i källkoden; allt injiceras via miljövariabler i OpenShift.
 
 ---
-*Detta projekt är skapat som en del av [DITT PROGRAM/KURS]. Vid frågor, vänligen kontakta [DITT NAMN].*
+*Detta projekt är skapat som en del av CI/CD kurs. Vid frågor, vänligen kontakta Arash Rahimi: arash_rahimi92@hotmail.com.*
 
 ---
-
-### Tips för din GitHub-profil:
-1.  **Byt ut länkarna:** Se till att länken till ditt workflow (badge) och ditt användarnamn är korrekta.
-2.  **Bilder:** Om du har screenshots från gästboken, lägg dem i en mapp som heter `docs/images` och inkludera dem i README-filen för att göra den mer visuell.
-3.  **Filstruktur:** Lägg gärna till en liten sektion som visar din filstruktur (t.ex. `/openshift`, `/src`, `/nginx`), det uppskattas ofta.
